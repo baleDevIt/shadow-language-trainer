@@ -6,6 +6,7 @@
 """
 import base64
 import glob
+import importlib.util
 import math
 import os
 import re
@@ -24,12 +25,25 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from yt_dlp import YoutubeDL
+from yt_dlp.networking.impersonate import ImpersonateTarget
 from yt_dlp.utils import download_range_func
 
 BASE = Path(__file__).parent
 MEDIA = BASE / "media"
 MEDIA.mkdir(exist_ok=True)
-app = FastAPI(title="英语听说训练器")
+app = FastAPI(title="English Listening & Speaking Trainer")
+
+@app.middleware("http")
+async def disable_html_cache(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path in ("/", "/index.html") or response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+def ui_text(lang: str, english: str, chinese: str) -> str:
+    return chinese if (lang or "").lower().startswith("zh") else english
 
 # 口音 + 性别 → 默认嗓音（用对话级新嗓音，比老的 Aria/Guy 自然很多）
 VOICES = {
@@ -42,16 +56,31 @@ VOICES = {
 # 给前端选的精选自然嗓音
 VOICE_LIST = {
     "en-US": [
-        {"id": "en-US-AvaNeural",     "label": "Ava（女·自然）"},
-        {"id": "en-US-EmmaNeural",    "label": "Emma（女·亲切）"},
-        {"id": "en-US-AndrewNeural",  "label": "Andrew（男·自然）"},
-        {"id": "en-US-BrianNeural",   "label": "Brian（男·随和）"},
+        {"id": "en-US-AvaNeural",     "label": "Ava (female · natural)"},
+        {"id": "en-US-EmmaNeural",    "label": "Emma (female · friendly)"},
+        {"id": "en-US-AndrewNeural",  "label": "Andrew (male · natural)"},
+        {"id": "en-US-BrianNeural",   "label": "Brian (male · relaxed)"},
     ],
     "en-GB": [
-        {"id": "en-GB-SoniaNeural",   "label": "Sonia（女·自然）"},
-        {"id": "en-GB-LibbyNeural",   "label": "Libby（女·年轻）"},
-        {"id": "en-GB-RyanNeural",    "label": "Ryan（男·自然）"},
-        {"id": "en-GB-ThomasNeural",  "label": "Thomas（男·沉稳）"},
+        {"id": "en-GB-SoniaNeural",   "label": "Sonia (female · natural)"},
+        {"id": "en-GB-LibbyNeural",   "label": "Libby (female · youthful)"},
+        {"id": "en-GB-RyanNeural",    "label": "Ryan (male · natural)"},
+        {"id": "en-GB-ThomasNeural",  "label": "Thomas (male · composed)"},
+    ],
+}
+
+VOICE_LIST_ZH = {
+    "en-US": [
+        {"id": "en-US-AvaNeural",     "label": "Ava（女 · 自然）"},
+        {"id": "en-US-EmmaNeural",    "label": "Emma（女 · 亲切）"},
+        {"id": "en-US-AndrewNeural",  "label": "Andrew（男 · 自然）"},
+        {"id": "en-US-BrianNeural",   "label": "Brian（男 · 随和）"},
+    ],
+    "en-GB": [
+        {"id": "en-GB-SoniaNeural",   "label": "Sonia（女 · 自然）"},
+        {"id": "en-GB-LibbyNeural",   "label": "Libby（女 · 年轻）"},
+        {"id": "en-GB-RyanNeural",    "label": "Ryan（男 · 自然）"},
+        {"id": "en-GB-ThomasNeural",  "label": "Thomas（男 · 沉稳）"},
     ],
 }
 
@@ -87,8 +116,8 @@ async def synth(text: str, voice: str, rate: float):
 _cache: dict = {}   # (text, voice, rate) -> (audio, marks)，避免重复合成
 
 @app.get("/api/voices")
-async def api_voices():
-    return VOICE_LIST
+async def api_voices(lang: str = "en"):
+    return VOICE_LIST_ZH if lang.lower().startswith("zh") else VOICE_LIST
 
 @app.post("/api/tts")
 async def api_tts(req: TTSReq):
@@ -200,10 +229,6 @@ def whisper_transcribe(path: str):
     return [{"text": s.text.strip(), "start": round(s.start, 2), "end": round(s.end, 2)}
             for s in segs if s.text.strip()]
 
-# 正常浏览器请求头：绕过 B 站等站点对 yt-dlp 默认 UA 的风控（412 Precondition Failed）
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
 def separate_vocals(audio_path: str) -> str:
     """用 Demucs 分离出人声(去背景音乐)，返回新的人声 mp3 路径。失败抛异常。CPU 慢，几分钟。"""
     outdir = MEDIA / "_demucs"
@@ -214,7 +239,7 @@ def separate_vocals(audio_path: str) -> str:
     base = os.path.splitext(os.path.basename(audio_path))[0]
     found = glob.glob(str(outdir / "*" / base / "vocals.mp3"))   # outdir/<model>/<base>/vocals.mp3
     if not found:
-        raise RuntimeError("Demucs 未产出人声文件")
+        raise RuntimeError("Demucs did not produce a vocals file")
     dest = MEDIA / (base + ".vocals.mp3")
     if dest.exists():
         dest.unlink()
@@ -226,6 +251,7 @@ def separate_vocals(audio_path: str) -> str:
 def run_extract(url: str, start: Optional[float], end: Optional[float], vocals: bool = False):
     vid = uuid.uuid4().hex[:10]
     is_bili = "bilibili.com" in url or "b23.tv" in url
+    is_youtube = any(host in url.lower() for host in ("youtube.com", "youtu.be"))
     opts = {
         "format": "bestaudio/best",
         "outtmpl": str(MEDIA / f"{vid}.%(ext)s"),
@@ -239,11 +265,16 @@ def run_extract(url: str, start: Optional[float], end: Optional[float], vocals: 
         "concurrent_fragment_downloads": 10,     # HLS 分片并行下载：绕开 X 等站点的单连接限速
         "socket_timeout": 20, "retries": 3, "fragment_retries": 5,  # 网络差时快速重试/失败，不无限卡
         "http_headers": {
-            "User-Agent": UA,
             "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
             "Referer": "https://www.bilibili.com/" if is_bili else url,
         },
     }
+    # YouTube now requires an external JS runtime for player challenges. Node >=22 is supported.
+    if shutil.which("node"):
+        opts["js_runtimes"] = {"node": {}}
+    # curl-cffi supplies a coherent TLS/browser fingerprint; do not combine it with a hard-coded UA.
+    if importlib.util.find_spec("curl_cffi"):
+        opts["impersonate"] = ImpersonateTarget()
     # 可选：从浏览器读 cookies（headers 仍被拦时设环境变量 YT_COOKIES_BROWSER=edge/chrome/firefox）
     cb = os.environ.get("YT_COOKIES_BROWSER")
     if cb:
@@ -261,8 +292,39 @@ def run_extract(url: str, start: Optional[float], end: Optional[float], vocals: 
     if start is not None and end is not None and end > start:
         opts["download_ranges"] = download_range_func(None, [(start, end)])
         opts["force_keyframes_at_cuts"] = True
-    with YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    try:
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+    except Exception as ex:
+        if not is_youtube or not re.search(r"\b403\b|forbidden|po.?token", str(ex), re.I):
+            raise
+
+        # Do not force a particular fallback format. Depending on the video, YouTube may expose
+        # HLS as a combined stream or expose no audio-only HLS format at all. Let yt-dlp choose
+        # from every usable format returned by each client, then extract audio with FFmpeg.
+        retry_clients = ("web_safari", "web_embedded")
+        last_error = ex
+        for player_client in retry_clients:
+            for partial in glob.glob(str(MEDIA / f"{vid}*")):
+                try:
+                    if os.path.isfile(partial):
+                        os.unlink(partial)
+                except OSError:
+                    pass
+            fallback_opts = {
+                **opts,
+                "continuedl": False,
+                "extractor_args": {"youtube": {"player_client": [player_client]}},
+            }
+            fallback_opts.pop("format", None)
+            try:
+                with YoutubeDL(fallback_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                break
+            except Exception as retry_error:
+                last_error = retry_error
+        else:
+            raise last_error
 
     mp3 = glob.glob(str(MEDIA / f"{vid}*.mp3"))
     audio_file = os.path.basename(mp3[0]) if mp3 else None
@@ -303,13 +365,21 @@ class ExtractReq(BaseModel):
     start: Optional[float] = None   # 秒
     end: Optional[float] = None
     vocals: bool = False            # 去除背景音（Demucs 人声分离）
+    lang: str = "en"
 
 @app.post("/api/extract")
 def api_extract(req: ExtractReq):    # 用同步函数，FastAPI 自动丢线程池（yt-dlp/whisper 是阻塞的）
     try:
         return run_extract(req.url, req.start, req.end, req.vocals)
     except Exception as ex:
-        return JSONResponse(status_code=400, content={"error": str(ex)})
+        detail = re.sub(r"\x1b\[[0-9;]*m", "", str(ex)).strip()
+        if re.search(r"\b403\b|forbidden|po.?token", detail, re.I):
+            detail = ui_text(
+                req.lang,
+                "YouTube rejected both available download methods (HTTP 403). This video or network now requires authenticated cookies or an external PO-token provider.",
+                "YouTube 拒绝了两种可用的下载方式（HTTP 403）。此视频或当前网络需要登录 Cookie 或外部 PO Token 提供程序。",
+            )
+        return JSONResponse(status_code=400, content={"error": detail})
 
 # ---------- Azure 发音评测 ----------
 AZURE_KEY_FILE = BASE / "azure_key.txt"
@@ -349,7 +419,7 @@ def _to_wav16k(raw: bytes, suffix: str) -> str:
     return fout.name
 
 
-def _assess(wav_path: str, reference_text: str, language: str) -> dict:
+def _assess(wav_path: str, reference_text: str, language: str, ui_lang: str = "en") -> dict:
     """对 wav 跑 Azure 发音评测（音素粒度 + 漏读多读 + 韵律），返回结构化结果。阻塞调用，放线程池里跑。"""
     import azure.cognitiveservices.speech as speechsdk
     speech_config = speechsdk.SpeechConfig(subscription=AZURE_KEY, region=AZURE_REGION)
@@ -370,11 +440,15 @@ def _assess(wav_path: str, reference_text: str, language: str) -> dict:
     result = recognizer.recognize_once()
 
     if result.reason == speechsdk.ResultReason.NoMatch:
-        return {"ok": False, "error": "no_speech", "message": "没听到清晰的语音，请靠近麦克风重读。"}
+        return {"ok": False, "error": "no_speech", "message": ui_text(
+            ui_lang,
+            "No clear speech was detected. Move closer to the microphone and try again.",
+            "没有检测到清晰语音。请靠近麦克风后重试。")}
     if result.reason == speechsdk.ResultReason.Canceled:
         det = result.cancellation_details
         return {"ok": False, "error": "canceled",
-                "message": f"Azure 取消：{det.reason} {det.error_details or ''}".strip()}
+                "message": (ui_text(ui_lang, "Azure canceled the request: ", "Azure 取消了请求：")
+                            + f"{det.reason} {det.error_details or ''}").strip()}
 
     r = speechsdk.PronunciationAssessmentResult(result)
     words = []
@@ -403,25 +477,30 @@ def _assess(wav_path: str, reference_text: str, language: str) -> dict:
 @app.post("/api/assess")
 async def api_assess(audio: UploadFile = File(...),
                      reference_text: str = Form(...),
-                     accent: str = Form("en-US")):
+                     accent: str = Form("en-US"),
+                     lang: str = Form("en")):
     if not AZURE_KEY:
         return JSONResponse(status_code=503, content={
             "ok": False, "error": "not_configured",
-            "message": "未配置 Azure 发音评测。设环境变量 AZURE_SPEECH_KEY / AZURE_SPEECH_REGION 后重启即可。"})
+            "message": ui_text(lang,
+                "Azure pronunciation assessment is not configured. Set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION, then restart the server.",
+                "尚未配置 Azure 发音评测。请设置 AZURE_SPEECH_KEY 和 AZURE_SPEECH_REGION，然后重启服务器。")})
     raw = await audio.read()
     if not raw:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "empty", "message": "没收到音频。"})
+        return JSONResponse(status_code=400, content={"ok": False, "error": "empty", "message": ui_text(lang, "No audio was received.", "未收到音频。")})
     suffix = os.path.splitext(audio.filename or "")[1] or ".webm"
     language = accent if accent in ("en-US", "en-GB") else "en-US"
     wav = None
     try:
         wav = await run_in_threadpool(_to_wav16k, raw, suffix)
-        return await run_in_threadpool(_assess, wav, reference_text, language)
+        return await run_in_threadpool(_assess, wav, reference_text, language, lang)
     except subprocess.CalledProcessError as ex:
         return JSONResponse(status_code=400, content={
-            "ok": False, "error": "transcode", "message": "音频转码失败：" + (ex.stderr or b"").decode("utf-8", "ignore")[-300:]})
+            "ok": False, "error": "transcode", "message": ui_text(lang, "Audio transcoding failed: ", "音频转码失败：") + (ex.stderr or b"").decode("utf-8", "ignore")[-300:]})
     except Exception as ex:
-        return JSONResponse(status_code=500, content={"ok": False, "error": "assess", "message": str(ex)})
+        return JSONResponse(status_code=500, content={
+            "ok": False, "error": "assess",
+            "message": ui_text(lang, "Pronunciation assessment failed: ", "发音评测失败：") + str(ex)})
     finally:
         if wav:
             try: os.unlink(wav)
@@ -440,21 +519,24 @@ async def get_azure_config():
 async def set_azure_config(request: Request):
     """把 key/region 写进 azure_key.txt 并更新全局，立刻生效。环境变量配过的话拒绝覆盖。"""
     global AZURE_KEY, AZURE_REGION
-    if AZURE_ENV_KEY:
-        return JSONResponse(status_code=409, content={
-            "ok": False, "message": "已用环境变量 AZURE_SPEECH_KEY 配置，设置面板不覆盖它。"})
     try:
         data = await request.json()
     except Exception:
         data = {}
+    lang = data.get("lang") or "en"
+    if AZURE_ENV_KEY:
+        return JSONResponse(status_code=409, content={
+            "ok": False, "message": ui_text(lang,
+                "Azure is configured through AZURE_SPEECH_KEY, so this setting cannot override it.",
+                "Azure 已通过 AZURE_SPEECH_KEY 环境变量配置，因此此设置无法覆盖它。")})
     key = (data.get("key") or "").strip()
     region = (data.get("region") or "").strip() or "southeastasia"
     if not key:
-        return JSONResponse(status_code=400, content={"ok": False, "message": "key 不能为空。"})
+        return JSONResponse(status_code=400, content={"ok": False, "message": ui_text(lang, "The key cannot be empty.", "密钥不能为空。")})
     try:
         AZURE_KEY_FILE.write_text(key + "\n" + region + "\n", encoding="utf-8")
     except OSError as ex:
-        return JSONResponse(status_code=500, content={"ok": False, "message": "写入 azure_key.txt 失败：" + str(ex)})
+        return JSONResponse(status_code=500, content={"ok": False, "message": ui_text(lang, "Could not write azure_key.txt: ", "无法写入 azure_key.txt：") + str(ex)})
     AZURE_KEY = key
     AZURE_REGION = region
     return {"ok": True, "configured": True, "region": region, "key_tail": key[-4:] if len(key) >= 4 else ""}
@@ -472,10 +554,10 @@ def _transcribe_text(wav_path: str) -> str:
 
 
 @app.post("/api/transcribe")
-async def api_transcribe(audio: UploadFile = File(...)):
+async def api_transcribe(audio: UploadFile = File(...), lang: str = Form("en")):
     raw = await audio.read()
     if not raw:
-        return JSONResponse(status_code=400, content={"ok": False, "message": "没收到音频。"})
+        return JSONResponse(status_code=400, content={"ok": False, "message": ui_text(lang, "No audio was received.", "未收到音频。")})
     suffix = os.path.splitext(audio.filename or "")[1] or ".webm"
     wav = None
     try:
@@ -484,9 +566,9 @@ async def api_transcribe(audio: UploadFile = File(...)):
         return {"ok": True, "text": text}
     except subprocess.CalledProcessError as ex:
         return JSONResponse(status_code=400, content={
-            "ok": False, "message": "音频转码失败：" + (ex.stderr or b"").decode("utf-8", "ignore")[-300:]})
+            "ok": False, "message": ui_text(lang, "Audio transcoding failed: ", "音频转码失败：") + (ex.stderr or b"").decode("utf-8", "ignore")[-300:]})
     except Exception as ex:
-        return JSONResponse(status_code=500, content={"ok": False, "message": "本地识别失败：" + str(ex)})
+        return JSONResponse(status_code=500, content={"ok": False, "message": ui_text(lang, "Local speech recognition failed: ", "本地语音识别失败：") + str(ex)})
     finally:
         if wav:
             try: os.unlink(wav)
@@ -525,24 +607,28 @@ def _extract_doc_text(raw: bytes, filename: str) -> str:
 
 
 @app.post("/api/extract-doc")
-async def api_extract_doc(doc: UploadFile = File(...)):
+async def api_extract_doc(doc: UploadFile = File(...), lang: str = Form("en")):
     raw = await doc.read()
     if not raw:
-        return JSONResponse(status_code=400, content={"ok": False, "message": "没收到文件。"})
+        return JSONResponse(status_code=400, content={"ok": False, "message": ui_text(lang, "No file was received.", "未收到文件。")})
     name = doc.filename or ""
     ext = os.path.splitext(name)[1].lower()
     try:
         text = await run_in_threadpool(_extract_doc_text, raw, name)
     except ValueError as ve:
-        msg = ("旧版 .doc 暂不支持，请用 Word 另存为 .docx 或导出 PDF 再上传。"
-               if str(ve) == "doc_old" else "只支持 PDF 和 .docx 文件。")
+        msg = (ui_text(lang,
+                    "Legacy .doc files are not supported. Save the document as .docx or export it as PDF, then upload it again.",
+                    "暂不支持旧版 .doc 文件。请在 Word 中另存为 .docx 或导出为 PDF 后重新上传。")
+               if str(ve) == "doc_old" else ui_text(lang, "Only PDF and .docx files are supported.", "仅支持 PDF 和 .docx 文件。"))
         return JSONResponse(status_code=400, content={"ok": False, "message": msg})
     except Exception as ex:
-        return JSONResponse(status_code=500, content={"ok": False, "message": "解析失败：" + str(ex)})
+        return JSONResponse(status_code=500, content={"ok": False, "message": ui_text(lang, "Could not parse the document: ", "无法解析文档：") + str(ex)})
     text = _clean_doc_text(text)
     if not text:
-        msg = ("这个 PDF 没有可提取的文字（多半是扫描/图片版），需要 OCR 才能识别，暂未支持。"
-               if ext == ".pdf" else "文档里没提取到文字。")
+        msg = (ui_text(lang,
+                    "This PDF contains no extractable text. It is probably scanned or image-based and requires OCR, which is not currently supported.",
+                    "此 PDF 没有可提取的文字，可能是扫描或图片版本，需要 OCR；当前暂不支持 OCR。")
+               if ext == ".pdf" else ui_text(lang, "No text could be extracted from the document.", "未能从文档中提取文字。"))
         return JSONResponse(status_code=400, content={"ok": False, "message": msg})
     return {"ok": True, "text": text, "chars": len(text)}
 
@@ -631,11 +717,23 @@ async def api_ipa(word: str = ""):
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "azure": bool(AZURE_KEY), "region": AZURE_REGION}
+    return {
+        "ok": True,
+        "azure": bool(AZURE_KEY),
+        "region": AZURE_REGION,
+        "youtube_extractor": "multi-client-v2",
+    }
 
 # 首页 + 静态资源（放最后，避免盖住上面的 /api 路由）
 @app.get("/")
 async def index():
-    return FileResponse(BASE / "index.html")
+    return FileResponse(
+        BASE / "index.html",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 app.mount("/", StaticFiles(directory=str(BASE)), name="static")

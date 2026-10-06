@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>英语听说训练器</title>
+<title>English Listening & Speaking Trainer</title>
 <style>
   :root{
     --bg:#f5f8fc; --card:#ffffff; --line:#e8eef5; --ink:#1f2733; --muted:#7c8794;
@@ -19,6 +19,11 @@
   .screen{ min-height:100vh; display:flex; flex-direction:column; justify-content:flex-start;
     padding:7vh 0; scroll-snap-align:start; }
   .hero h1{ font-size:25px; font-weight:600; margin:0; letter-spacing:.5px; }
+  .heroTop{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .langPicker{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+  .langPicker select{ border:1px solid var(--line); border-radius:9px; padding:7px 10px;
+    background:var(--card); color:var(--ink); font:inherit; outline:none; cursor:pointer; }
+  .langPicker select:focus{ border-color:var(--blue); }
   .hero .tag{ font-size:12px; font-weight:600; color:var(--blue); background:var(--blue-soft);
     padding:3px 10px; border-radius:6px; margin-left:8px; vertical-align:middle; }
   .hero .sub{ color:var(--muted); font-size:13px; margin:8px 0 26px; }
@@ -166,7 +171,7 @@
   .cmp{ background:var(--soft); border-radius:12px; padding:11px 14px; margin-top:10px; }
   .cmprow{ display:flex; gap:10px; align-items:baseline; font-size:15px; line-height:1.7; }
   .cmprow + .cmprow{ margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
-  .cmplabel{ flex:none; width:34px; font-size:12px; color:var(--muted); padding-top:2px; }
+  .cmplabel{ flex:none; width:54px; font-size:12px; color:var(--muted); padding-top:2px; }
   .cmptext{ overflow-wrap:anywhere; }
   /* 折叠 */
   .foldhead{ cursor:pointer; user-select:none; font-size:13px; color:var(--blue); margin-top:12px;
@@ -179,32 +184,40 @@
   <!-- 第一屏：输入 -->
   <div class="screen" id="screen1">
     <div class="hero">
-      <h1>英语听说训练器</h1>
-      <div class="sub">粘贴文本，或从视频提取真实素材开练</div>
+      <div class="heroTop">
+        <h1>English Listening & Speaking Trainer</h1>
+        <label class="langPicker"><span id="languageLabel">Language</span>
+          <select id="languageSelect" aria-label="Language">
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+          </select>
+        </label>
+      </div>
+      <div class="sub" id="heroSubtitle">Paste text or extract authentic material from a video to start practising</div>
     </div>
     <div class="card">
-      <div class="head">① 放入要练的英文
-        <button class="ghost" id="upDoc" style="margin-left:auto;padding:7px 14px;">上传 PDF / Word</button>
+      <div class="head"><span id="inputHead">① Add the English you want to practise</span>
+        <button class="ghost" id="upDoc" style="margin-left:auto;padding:7px 14px;">Upload PDF / Word</button>
         <input type="file" id="docFile" accept=".pdf,.docx,.doc" style="display:none;">
       </div>
-      <textarea id="input" placeholder="把英文段落 / 对话粘贴进来，每句一行或用句号分隔都行……也可以点右上角上传 PDF / Word 文档自动提取文字。"></textarea>
+      <textarea id="input" placeholder="Paste an English paragraph or dialogue here. Put each sentence on a new line or separate sentences with punctuation. You can also upload a PDF or Word document to extract its text automatically."></textarea>
       <div class="row" style="margin-top:14px;">
-        <button class="primary" id="load">② 拆成句子，开始练</button>
+        <button class="primary" id="load">② Split into sentences and start</button>
         <span class="muted" id="loadInfo"></span>
       </div>
 
-      <div class="divider">或，从视频提取真实素材</div>
-      <input class="tin full" id="vurl" placeholder="粘贴视频链接（YouTube / Bilibili 等，优先用字幕，没字幕自动转写）">
+      <div class="divider">or extract authentic material from a video</div>
+      <input class="tin full" id="vurl" placeholder="Paste a video link (YouTube, Bilibili, etc.). Subtitles are preferred; otherwise the audio is transcribed automatically.">
       <div class="row" style="margin-top:12px;">
-        <span class="muted">只练某一段（选填，留空=全部）</span>
-        <input class="tin t" id="vstart" placeholder="开始 如0:30">
+        <span class="muted" id="rangeHelp">Practise a specific section (optional; leave blank for the entire video)</span>
+        <input class="tin t" id="vstart" placeholder="Start, e.g. 0:30">
         <span class="muted">→</span>
-        <input class="tin t" id="vend" placeholder="结束 如2:00">
-        <button class="primary" id="vload">提取并开始练</button>
+        <input class="tin t" id="vend" placeholder="End, e.g. 2:00">
+        <button class="primary" id="vload">Extract and start</button>
       </div>
       <label class="row" style="margin-top:12px; cursor:pointer;">
         <input type="checkbox" id="vvocals" style="accent-color:var(--blue);">
-        <span class="muted">去除背景音，只保留人声（AI 分离，较慢，建议配合"只练某一段"用）</span>
+        <span class="muted" id="vocalsLabel">Remove background audio and keep vocals only (AI separation is slower; using a short section is recommended)</span>
       </label>
       <div class="muted" id="vinfo" style="margin-top:10px;"></div>
     </div>
@@ -215,37 +228,37 @@
   <div class="screen" id="trainer" style="display:none;">
     <div class="card">
       <div class="tabs">
-        <div class="tab active" data-mode="blind">盲听</div>
-        <div class="tab" data-mode="listen">听力</div>
-        <div class="tab" data-mode="shadow">跟读</div>
-        <div class="tab" data-mode="flow">连读</div>
+        <div class="tab active" data-mode="blind">Dictation</div>
+        <div class="tab" data-mode="listen">Listening</div>
+        <div class="tab" data-mode="shadow">Shadowing</div>
+        <div class="tab" data-mode="flow">Continuous</div>
       </div>
 
       <div class="srcTitle" id="srcTitle" style="display:none;"></div>
       <div class="progress" id="progress">1 / 1</div>
 
       <div class="controls">
-        <button class="primary" id="play"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>播放</button>
-        <div class="seg" id="accentSeg" title="口音">
-          <button data-accent="en-US" class="on">美音</button>
-          <button data-accent="en-GB">英音</button>
+        <button class="primary" id="play"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play</button>
+        <div class="seg" id="accentSeg" title="Accent">
+          <button data-accent="en-US" class="on">US</button>
+          <button data-accent="en-GB">UK</button>
         </div>
-        <div class="speed">语速 <input type="range" id="rate" min="0" max="100" step="1" value="50"> <span id="rateVal">1.0x</span></div>
-        <button class="ghost" id="loopBtn" title="循环播放当前句，每遍之间留空隙给你写">循环</button>
+        <div class="speed"><span id="speedLabel">Speed</span> <input type="range" id="rate" min="0" max="100" step="1" value="50"> <span id="rateVal">1.0x</span></div>
+        <button class="ghost" id="loopBtn" title="Repeat the current sentence, leaving time to type between plays">Repeat</button>
       </div>
       <div class="sentence" id="sentence"></div>
       <div class="controls" id="navRow">
-        <button class="ghost" id="prev">← 上一句</button>
-        <button class="ghost" id="next">下一句 →</button>
+        <button class="ghost" id="prev">← Previous</button>
+        <button class="ghost" id="next">Next →</button>
       </div>
 
       <!-- 盲听 -->
       <div class="feedback" id="blindBox" style="display:none;">
-        <textarea id="blindInput" placeholder="打出你听到的内容，可以不打空格连着敲，对比时自动分词……" style="min-height:64px;"></textarea>
+        <textarea id="blindInput" placeholder="Type what you hear. Spaces are optional; the answer will be split into words automatically when checked." style="min-height:64px;"></textarea>
         <div class="row" style="margin-top:10px;">
-          <button class="primary" id="blindCheck">对比答案</button>
-          <button class="ghost" id="blindNext">下一句 →</button>
-          <button class="ghost" id="blindPrev" style="margin-left:auto; opacity:.65;">← 上一句</button>
+          <button class="primary" id="blindCheck">Check answer</button>
+          <button class="ghost" id="blindNext">Next →</button>
+          <button class="ghost" id="blindPrev" style="margin-left:auto; opacity:.65;">← Previous</button>
         </div>
         <div id="blindResult"></div>
       </div>
@@ -253,14 +266,14 @@
       <!-- 跟读 -->
       <div class="feedback" id="shadowBox" style="display:none;">
         <div class="row" style="margin-bottom:12px;">
-          <span class="muted">评分引擎</span>
+          <span class="muted">Assessment engine</span>
           <span class="seg" id="engSeg">
-            <button data-eng="azure" class="on">Azure 精准</button>
-            <button data-eng="browser">基础(免费无限)</button>
+            <button data-eng="azure" class="on">Azure precise</button>
+            <button data-eng="browser">Basic (free, unlimited)</button>
           </span>
         </div>
         <div class="row">
-          <button class="primary" id="rec"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>开始录音跟读</button>
+          <button class="primary" id="rec"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>Start recording</button>
         </div>
         <div id="shadowResult"></div>
       </div>
@@ -270,23 +283,23 @@
   <!-- 第三屏：历史记录 -->
   <div class="screen" id="histScreen" style="display:none;">
     <div class="card" id="histCard" style="display:none;">
-      <div class="head">继续练 · 历史记录
-        <button class="ghost" id="backToInput" style="margin-left:auto; padding:7px 14px;">↑ 返回输入</button>
+      <div class="head"><span id="historyHead">Continue practising · History</span>
+        <button class="ghost" id="backToInput" style="margin-left:auto; padding:7px 14px;">↑ Back to input</button>
       </div>
       <div id="histList"></div>
       <div class="histPager" id="histPager" style="display:none;">
-        <button class="ghost" id="histPrev">← 上一页</button>
+        <button class="ghost" id="histPrev">← Previous page</button>
         <span class="muted" id="histPageInfo"></span>
-        <button class="ghost" id="histNext">下一页 →</button>
+        <button class="ghost" id="histNext">Next page →</button>
       </div>
     </div>
   </div>
 
-  <div class="foot">点句子里任意单词即可发音、看音标</div>
+  <div class="foot">Click any word in a sentence to hear it and view its pronunciation</div>
 </div>
 
 <!-- 音标弹层：点词即发音，这里只显示音标；点它可重听 -->
-<div class="pop" id="pop" title="点这里重听">
+<div class="pop" id="pop" title="Click to listen again">
   <svg class="picon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
   <span class="pi" id="popIpa">…</span>
 </div>
@@ -294,6 +307,80 @@
 <script>
 const state = { sentences:[], idx:0, idxBy:{blind:0,listen:0,shadow:0}, accent:'en-US', voice:'en-US-AvaNeural',
   rate:1.0, mode:'blind', source:'text', timing:null, audioUrl:null, loop:false };
+const LANG_KEY='et_language_v2';
+let uiLang=localStorage.getItem(LANG_KEY)==='zh'?'zh':'en';
+const I18N={
+  en:{
+    appTitle:'English Listening & Speaking Trainer', language:'Language', subtitle:'Paste text or extract authentic material from a video to start practising',
+    inputHead:'① Add the English you want to practise', uploadDoc:'Upload PDF / Word', inputPlaceholder:'Paste an English paragraph or dialogue here. Put each sentence on a new line or separate sentences with punctuation. You can also upload a PDF or Word document to extract its text automatically.',
+    startPractice:'② Split into sentences and start', videoDivider:'or extract authentic material from a video', videoPlaceholder:'Paste a video link (YouTube, Bilibili, etc.). Subtitles are preferred; otherwise the audio is transcribed automatically.', rangeHelp:'Practise a specific section (optional; leave blank for the entire video)', startPlaceholder:'Start, e.g. 0:30', endPlaceholder:'End, e.g. 2:00', extractStart:'Extract and start', vocalsLabel:'Remove background audio and keep vocals only (AI separation is slower; using a short section is recommended)',
+    dictation:'Dictation', listening:'Listening', shadowing:'Shadowing', continuous:'Continuous', play:'Play', pause:'Pause', accent:'Accent', us:'US', uk:'UK', speed:'Speed', repeat:'Repeat', repeatTitle:'Repeat the current sentence, leaving time to type between plays', previous:'← Previous', next:'Next →', dictationPlaceholder:'Type what you hear. Spaces are optional; the answer will be split into words automatically when checked.', checkAnswer:'Check answer', assessmentEngine:'Assessment engine', azurePrecise:'Azure precise', basic:'Basic (free, unlimited)', startRecording:'Start recording', stopAssess:'Stop and assess', history:'Continue practising · History', backInput:'↑ Back to input', previousPage:'← Previous page', nextPage:'Next page →', footer:'Click any word in a sentence to hear it and view its pronunciation', listenAgain:'Click to listen again',
+    fullPassage:'Full passage · {n} sentences', hidden:'Hidden', micError:'Could not access the microphone: {error}. Open the app at http://localhost:8000 and allow microphone access.', recordingAzure:'Recording… Read the sentence aloud, then press Space or click “Stop and assess”.', recordingBasic:'Recording… Read the sentence aloud, then press Space to finish (local, free offline recognition).', assessing:'Assessing… The recording is being sent to Azure for pronunciation analysis. This takes a few seconds.', requestFailed:'Request failed: {error}', azureNotConfigured:'Azure is not configured. Switched to basic recognition (free and unlimited). Click record and try again.', quotaUsed:'Your free Azure quota has been used. Switched to basic recognition (free and unlimited), so you can continue practising. Switch back to Azure precise after the quota resets next month.', azureNetwork:'Could not connect to the Azure Speech server. This is usually a temporary network issue.<br>·&nbsp;Wait a moment, then <b>record again</b>.<br>·&nbsp;If it keeps failing, select <b>Basic (free, unlimited)</b> above to practise with local offline recognition.', assessmentFailed:'Assessment failed', recognizing:'Recognising locally… The model takes a little longer to load the first time.', recognitionFailed:'Recognition failed', overallScore:'Overall pronunciation score', accuracy:'Accuracy', fluency:'Fluency', completeness:'Completeness', prosody:'Prosody', recognized:'Recognised:', unclear:'(unclear)', wordScores:'Scores by word (green = good, yellow = fair, red = poor, strikethrough = omitted, italic + = inserted). Click a word to view its phonemes:', phonemeScores:'Phoneme scores for “{word}”{whole}:', wholeWord:' (whole word: {score})', wordsMatched:'{matched}/{total} words matched', matchingWarn:'This is <strong>speech-to-text matching</strong>, not a true pronunciation assessment. Configure Azure for phoneme-level scoring.', correctWords:'{correct}/{total} words correct', answerComparison:'Answer comparison', legend:'<i>Top: correct answer (<span class="a-err">red</span> = incorrect, <span class="a-miss">dotted</span> = omitted)</i><i>Bottom: your answer (<span class="d-ok">green</span> = correct, <span class="d-wrong">red</span> = incorrect, <span class="d-extra">strikethrough</span> = extra)</i>', correct:'Correct', yours:'Yours', empty:'(empty)',
+    extracting:'Extracting…', extractingFile:'Extracting text from “{name}”…', extractionFailed:'Extraction failed', extractedFile:'✓ Extracted {name} (about {count} characters). Edit the text if needed, then click ② to start.', uploadFailed:'✗ Upload failed: {error}', videoMaterial:'Video material · {title}', untitled:'Untitled', addText:'Add some English text first.', sentenceCount:'{count} sentences', pasteVideo:'Paste a video link first.', endAfterStart:'The end time must be later than the start time.', downloadVocals:'Downloading and removing background audio with AI… Vocal separation may take several minutes.', downloadProcess:'Downloading and processing… This may take 1–2 minutes depending on the video length; transcription takes longer when subtitles are unavailable.', noContent:'No subtitles or spoken content could be extracted', originalSubtitles:'original subtitles', speechTranscription:'speech transcription', bgRemoved:' · background audio removed', bgFailed:' · background removal failed (using original audio)', extractionComplete:'Extraction complete · {count} sentences · Source: {source}{vocals}', extractionError:'Extraction failed: {error}', justNow:'just now', minAgo:'{n} min ago', hourAgo:'{n} hr ago', dayAgo:'{n} days ago', completed:'Completed', sentenceProgress:'Sentence {current} of {total}', video:'Video', text:'Text', deleteItem:'Delete this item', delete:'Delete', pageOf:'Page {current} of {total}'
+  },
+  zh:{
+    appTitle:'英语听说训练器', language:'语言', subtitle:'粘贴文本，或从视频提取真实素材开练',
+    inputHead:'① 放入要练的英文', uploadDoc:'上传 PDF / Word', inputPlaceholder:'把英文段落或对话粘贴进来，每句一行或用句号分隔都行。也可以上传 PDF / Word 文档自动提取文字。',
+    startPractice:'② 拆成句子，开始练', videoDivider:'或从视频提取真实素材', videoPlaceholder:'粘贴视频链接（YouTube / Bilibili 等，优先使用字幕，无字幕时自动转写）', rangeHelp:'只练某一段（选填，留空表示全部）', startPlaceholder:'开始，如 0:30', endPlaceholder:'结束，如 2:00', extractStart:'提取并开始练', vocalsLabel:'去除背景音，只保留人声（AI 分离较慢，建议只处理需要练习的片段）',
+    dictation:'盲听', listening:'听力', shadowing:'跟读', continuous:'连读', play:'播放', pause:'暂停', accent:'口音', us:'美音', uk:'英音', speed:'语速', repeat:'循环', repeatTitle:'循环播放当前句，每遍之间留出书写时间', previous:'← 上一句', next:'下一句 →', dictationPlaceholder:'打出你听到的内容，可以不输入空格；对比时会自动分词。', checkAnswer:'对比答案', assessmentEngine:'评分引擎', azurePrecise:'Azure 精准', basic:'基础（免费无限）', startRecording:'开始录音跟读', stopAssess:'停止并评分', history:'继续练 · 历史记录', backInput:'↑ 返回输入', previousPage:'← 上一页', nextPage:'下一页 →', footer:'点击句子中的任意单词即可听发音、看音标', listenAgain:'点击这里重听',
+    fullPassage:'全文 · {n} 句', hidden:'已隐藏', micError:'无法打开麦克风：{error}。请使用 http://localhost:8000 访问并允许麦克风权限。', recordingAzure:'录音中……请读出这句话，读完按空格或点击“停止并评分”。', recordingBasic:'录音中……请读出这句话，读完按空格结束（本地识别，离线免费）。', assessing:'评分中……正在上传到 Azure 分析发音，大约需要几秒。', requestFailed:'请求失败：{error}', azureNotConfigured:'未配置 Azure，已切换到基础识别（免费无限）。请点击录音再说一遍。', quotaUsed:'Azure 免费额度已用完，已自动切换到基础识别（免费无限），可以继续练习。下月额度重置后可切回 Azure 精准。', azureNetwork:'无法连接 Azure 语音服务器，通常是暂时的网络问题。<br>·&nbsp;请稍等后<b>再次录音重试</b>。<br>·&nbsp;如果仍无法连接，请选择上方的<b>基础（免费无限）</b>，使用本地离线识别继续练习。', assessmentFailed:'评分失败', recognizing:'本地识别中……首次加载模型会稍慢，之后会更快。', recognitionFailed:'识别失败', overallScore:'发音综合得分', accuracy:'准确度', fluency:'流利度', completeness:'完整度', prosody:'韵律', recognized:'识别到：', unclear:'（没听清）', wordScores:'逐词得分（绿色=好，黄色=中，红色=差，删除线=漏读，斜体+=多读）。点击单词查看音素：', phonemeScores:'“{word}”的音素得分{whole}：', wholeWord:'（整词：{score}）', wordsMatched:'读对 {matched}/{total} 个词', matchingWarn:'这是<strong>文字识别匹配</strong>，不是真实发音评测。配置 Azure 后可获得音素级评分。', correctWords:'听对 {correct}/{total} 个词', answerComparison:'答案对照', legend:'<i>上行：正确答案（<span class="a-err">红色</span>=错误，<span class="a-miss">虚线</span>=漏听）</i><i>下行：你的答案（<span class="d-ok">绿色</span>=正确，<span class="d-wrong">红色</span>=错误，<span class="d-extra">删除线</span>=多写）</i>', correct:'正确', yours:'你的', empty:'（未输入）',
+    extracting:'提取中…', extractingFile:'正在从“{name}”提取文字…', extractionFailed:'提取失败', extractedFile:'✓ 已提取 {name}（约 {count} 个字符），可编辑后点击②开始练习。', uploadFailed:'✗ 上传失败：{error}', videoMaterial:'视频素材 · {title}', untitled:'未命名', addText:'请先放入一些英文内容。', sentenceCount:'共 {count} 句', pasteVideo:'请先粘贴视频链接。', endAfterStart:'结束时间必须晚于开始时间。', downloadVocals:'正在下载并使用 AI 去除背景音……人声分离可能需要几分钟。', downloadProcess:'正在下载并处理……根据视频长度可能需要 1–2 分钟；无字幕时转写会更久。', noContent:'未提取到字幕或语音内容', originalSubtitles:'原字幕', speechTranscription:'语音转写', bgRemoved:' · 已去除背景音', bgFailed:' · 背景音去除失败（使用原音）', extractionComplete:'提取成功 · 共 {count} 句 · 来源：{source}{vocals}', extractionError:'提取失败：{error}', justNow:'刚刚', minAgo:'{n} 分钟前', hourAgo:'{n} 小时前', dayAgo:'{n} 天前', completed:'已练完', sentenceProgress:'练到第 {current}/{total} 句', video:'视频', text:'文本', deleteItem:'删除这条记录', delete:'删除', pageOf:'第 {current}/{total} 页'
+  }
+};
+function tr(key,vars={}){
+  let s=(I18N[uiLang]&&I18N[uiLang][key])||I18N.en[key]||key;
+  return s.replace(/\{(\w+)\}/g,(_,k)=>vars[k]??'');
+}
+function applyLanguage(lang,resetTransient=false){
+  uiLang=lang==='zh'?'zh':'en';
+  localStorage.setItem(LANG_KEY,uiLang);
+  document.documentElement.lang=uiLang==='zh'?'zh-CN':'en';
+  document.title=tr('appTitle');
+  document.querySelector('.hero h1').textContent=tr('appTitle');
+  document.getElementById('languageLabel').textContent=tr('language');
+  document.getElementById('languageSelect').value=uiLang;
+  document.getElementById('languageSelect').setAttribute('aria-label',tr('language'));
+  document.getElementById('heroSubtitle').textContent=tr('subtitle');
+  document.getElementById('inputHead').textContent=tr('inputHead');
+  document.getElementById('upDoc').textContent=tr('uploadDoc');
+  document.getElementById('input').placeholder=tr('inputPlaceholder');
+  document.getElementById('load').textContent=tr('startPractice');
+  document.querySelector('.divider').textContent=tr('videoDivider');
+  document.getElementById('vurl').placeholder=tr('videoPlaceholder');
+  document.getElementById('rangeHelp').textContent=tr('rangeHelp');
+  document.getElementById('vstart').placeholder=tr('startPlaceholder');
+  document.getElementById('vend').placeholder=tr('endPlaceholder');
+  document.getElementById('vload').textContent=tr('extractStart');
+  document.getElementById('vocalsLabel').textContent=tr('vocalsLabel');
+  document.querySelector('[data-mode="blind"]').textContent=tr('dictation');
+  document.querySelector('[data-mode="listen"]').textContent=tr('listening');
+  document.querySelector('[data-mode="shadow"]').textContent=tr('shadowing');
+  document.querySelector('[data-mode="flow"]').textContent=tr('continuous');
+  document.getElementById('accentSeg').title=tr('accent');
+  document.querySelector('[data-accent="en-US"]').textContent=tr('us');
+  document.querySelector('[data-accent="en-GB"]').textContent=tr('uk');
+  document.getElementById('speedLabel').textContent=tr('speed');
+  const loop=document.getElementById('loopBtn'); loop.textContent=tr('repeat'); loop.title=tr('repeatTitle');
+  document.getElementById('prev').textContent=tr('previous');
+  document.getElementById('next').textContent=tr('next');
+  document.getElementById('blindInput').placeholder=tr('dictationPlaceholder');
+  document.getElementById('blindCheck').textContent=tr('checkAnswer');
+  document.getElementById('blindNext').textContent=tr('next');
+  document.getElementById('blindPrev').textContent=tr('previous');
+  document.querySelector('#shadowBox .row .muted').textContent=tr('assessmentEngine');
+  document.querySelector('[data-eng="azure"]').textContent=tr('azurePrecise');
+  document.querySelector('[data-eng="browser"]').textContent=tr('basic');
+  document.getElementById('historyHead').textContent=tr('history');
+  document.getElementById('backToInput').textContent=tr('backInput');
+  document.getElementById('histPrev').textContent=tr('previousPage');
+  document.getElementById('histNext').textContent=tr('nextPage');
+  document.querySelector('.foot').textContent=tr('footer');
+  document.getElementById('pop').title=tr('listenAgain');
+  setRecBtn(recording); setPlayBtn(!player.paused);
+  if(state.sentences.length){ setProgress(); if(state.source==='video') document.getElementById('srcTitle').textContent=tr('videoMaterial',{title:state.title||tr('untitled')}); }
+  if(resetTransient){ ['shadowResult','blindResult','loadInfo','vinfo'].forEach(id=>document.getElementById(id).innerHTML=''); }
+  renderHist();
+}
 // idxBy：盲听/听力/跟读各记各的进度，互不相干；source: 'text'(Edge TTS) | 'video'(真人原声片段)
 let blindChecked=false;  // 这句是否已比对过：管 Enter 行为（未比对=比对 / 已比对=下一句）
 let loopTimer=null;      // 循环播放的等待计时器
@@ -435,9 +522,9 @@ async function speak(text,opts={}){
 // ---- 进度条（句号可输入跳转）----
 function updateProgress(){
   const n=state.sentences.length, el=document.getElementById('progress');
-  if(state.mode==='flow'){ el.innerHTML=`全文 · ${n} 句`; return; }
+  if(state.mode==='flow'){ el.innerHTML=tr('fullPassage',{n}); return; }
   el.innerHTML=`<input id="jumpIdx" class="jumpin" value="${state.idx+1}" inputmode="numeric"> / ${n}`
-    + (state.mode==='blind'?` <span class="chip">已隐藏</span>`:'');
+    + (state.mode==='blind'?` <span class="chip">${tr('hidden')}</span>`:'');
   const ji=document.getElementById('jumpIdx');
   ji.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); jumpTo(+ji.value); ji.blur(); } };
   ji.onchange=()=>jumpTo(+ji.value);
@@ -572,9 +659,9 @@ const normWords=s=>s.toLowerCase().replace(/[^a-z'\s]/g,' ').split(/\s+/).filter
 const scoreCls=v=>v==null?'mid':(v>=80?'good':v>=60?'mid':'low');
 let mediaRec=null, recChunks=[], recording=false;
 const recBtn=document.getElementById('rec');
-const REC_IDLE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>开始录音跟读';
-const REC_STOP='<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>停止并评分';
-function setRecBtn(rec){ recBtn.innerHTML=rec?REC_STOP:REC_IDLE; recBtn.classList.toggle('recording',rec); }
+const REC_IDLE_ICON='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>';
+const REC_STOP_ICON='<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+function setRecBtn(rec){ recBtn.innerHTML=(rec?REC_STOP_ICON+tr('stopAssess'):REC_IDLE_ICON+tr('startRecording')); recBtn.classList.toggle('recording',rec); }
 
 // 引擎切换：azure 精准 / browser 基础(免费无限)
 let assessEngine='azure';
@@ -601,7 +688,7 @@ async function recToggle(){
   stopPlaybackForRec();
   let stream;
   try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
-  catch(e){ loopBlocked=false; box.innerHTML='<div class="hint">麦克风打不开：'+e.message+'。请用 http://localhost:8000 访问并允许麦克风。</div>'; return; }
+  catch(e){ loopBlocked=false; box.innerHTML='<div class="hint">'+tr('micError',{error:e.message})+'</div>'; return; }
   recChunks=[]; mediaRec=new MediaRecorder(stream);
   mediaRec.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
   const eng=assessEngine;                                    // 录音开始时锁定引擎，避免中途切换错乱
@@ -612,32 +699,33 @@ async function recToggle(){
   };
   mediaRec.start(); recording=true; setRecBtn(true);
   box.innerHTML='<div class="muted">'+(eng==='azure'
-    ? '录音中……读出这句话，读完按一下空格（或点“停止并评分”）。'
-    : '录音中……读出这句话，读完按一下空格结束（本地识别，离线免费）。')+'</div>';
+    ? tr('recordingAzure')
+    : tr('recordingBasic'))+'</div>';
 }
 
 async function sendAssess(blob){
   const box=document.getElementById('shadowResult');
-  box.innerHTML='<div class="muted">评分中……（上传到 Azure 分析发音，约几秒）</div>';
+  box.innerHTML='<div class="muted">'+tr('assessing')+'</div>';
   const fd=new FormData();
   fd.append('audio', blob, 'rec'+(blob.type.includes('ogg')?'.ogg':'.webm'));
   fd.append('reference_text', state.sentences[state.idx]);
   fd.append('accent', state.accent);
+  fd.append('lang', uiLang);
   let res, data;
   try{ res=await fetch('/api/assess',{method:'POST',body:fd}); data=await res.json(); }
-  catch(e){ box.innerHTML='<div class="hint">请求失败：'+e.message+'</div>'; return; }
+  catch(e){ box.innerHTML='<div class="hint">'+tr('requestFailed',{error:e.message})+'</div>'; return; }
   if(res.status===503 && data.error==='not_configured'){
-    switchToBrowser('未配置 Azure，已切到基础识别（免费无限）。点录音再说一遍。'); return;
+    switchToBrowser(tr('azureNotConfigured')); return;
   }
   if(!data.ok){
     const m=((data.message||'')+(data.error||'')).toLowerCase();
     if(/quota|forbidden|exceed|403|429|out of/.test(m)){
-      switchToBrowser('Azure 免费额度用完了，已自动切到基础识别（免费无限），可继续练。下月额度重置后可切回 Azure 精准。'); return;
+      switchToBrowser(tr('quotaUsed')); return;
     }
     if(data.error==='canceled' || /connection|connect|timeout|remote host|ws_open|network|unreachable|underlying_io/.test(m)){
-      box.innerHTML='<div class="hint">连不上 Azure 语音服务器，多半是网络波动（国内连 Azure 偶尔会这样）。<br>·&nbsp;稍等一下<b>再点录音重试一次</b>，通常就好了；<br>·&nbsp;老连不上，就点上方切到「<b>基础(免费无限)</b>」，本地识别、离线也能练。</div>'; return;
+      box.innerHTML='<div class="hint">'+tr('azureNetwork')+'</div>'; return;
     }
-    box.innerHTML='<div class="hint">'+(data.message||'评分失败')+'</div>'; return;
+    box.innerHTML='<div class="hint">'+(data.message||tr('assessmentFailed'))+'</div>'; return;
   }
   renderAssess(data);
 }
@@ -645,13 +733,14 @@ async function sendAssess(blob){
 // 基础引擎：上传录音 → 后端本地 Whisper 转写 → 文字匹配（离线、免费、不依赖 Google/Azure）
 async function sendTranscribe(blob){
   const box=document.getElementById('shadowResult');
-  box.innerHTML='<div class="muted">本地识别中……（首次会加载模型、稍慢，之后很快）</div>';
+  box.innerHTML='<div class="muted">'+tr('recognizing')+'</div>';
   const fd=new FormData();
   fd.append('audio', blob, 'rec'+(blob.type.includes('ogg')?'.ogg':'.webm'));
+  fd.append('lang', uiLang);
   let res,data;
   try{ res=await fetch('/api/transcribe',{method:'POST',body:fd}); data=await res.json(); }
-  catch(e){ box.innerHTML='<div class="hint">请求失败：'+e.message+'</div>'; return; }
-  if(!data.ok){ box.innerHTML='<div class="hint">'+(data.message||'识别失败')+'</div>'; return; }
+  catch(e){ box.innerHTML='<div class="hint">'+tr('requestFailed',{error:e.message})+'</div>'; return; }
+  if(!data.ok){ box.innerHTML='<div class="hint">'+(data.message||tr('recognitionFailed'))+'</div>'; return; }
   scoreShadowText(data.text||'');
 }
 
@@ -678,13 +767,13 @@ function renderAssess(data){
   }).join('');
 
   document.getElementById('shadowResult').innerHTML=
-    `<div class="feedback"><span class="score ${scoreCls(overall)}">${overall==null?'—':overall}分</span>
-       <span class="muted"> 发音综合得分</span></div>
+    `<div class="feedback"><span class="score ${scoreCls(overall)}">${overall==null?'—':overall}</span>
+       <span class="muted"> ${tr('overallScore')}</span></div>
      <div class="scoregrid">
-       ${cell('准确度',s.accuracy)}${cell('流利度',s.fluency)}${cell('完整度',s.completeness)}${cell('韵律',s.prosody)}
+       ${cell(tr('accuracy'),s.accuracy)}${cell(tr('fluency'),s.fluency)}${cell(tr('completeness'),s.completeness)}${cell(tr('prosody'),s.prosody)}
      </div>
-     <div class="pill" style="margin-top:12px;">识别到：<strong>${data.recognized||'（没听清）'}</strong></div>
-     <div class="muted" style="margin-top:12px;">逐词得分（绿好/黄中/红差，删除线=漏读，斜体+=多读）·点词看音素：</div>
+     <div class="pill" style="margin-top:12px;">${tr('recognized')} <strong>${data.recognized||tr('unclear')}</strong></div>
+     <div class="muted" style="margin-top:12px;">${tr('wordScores')}</div>
      <div class="words">${chips}</div>
      <div class="phbox" id="phbox"></div>`;
 
@@ -695,7 +784,8 @@ function renderAssess(data){
     if(!w.phonemes||!w.phonemes.length){ ph.style.display='none'; return; }
     document.querySelectorAll('#shadowResult .wchip').forEach(x=>x.classList.remove('sel'));
     c.classList.add('sel'); ph.style.display='block';
-    ph.innerHTML=`<div class="pht">“${w.word}” 音素得分${w.accuracy!=null?'（整词 '+w.accuracy+'）':''}：</div>`
+    const whole=w.accuracy!=null?tr('wholeWord',{score:w.accuracy}):'';
+    ph.innerHTML=`<div class="pht">${tr('phonemeScores',{word:w.word,whole})}</div>`
       +`<div class="phs">${w.phonemes.map(p=>`<span class="ph ${scoreCls(p.score)}">${p.p} ${p.score}</span>`).join('')}</div>`;
   });
 }
@@ -714,10 +804,10 @@ function scoreShadowText(heard){
     s.classList.remove('ok','bad'); s.classList.add(marks[wi++]?'ok':'bad'); });
   const cls=pct>=80?'good':pct>=50?'mid':'low';
   document.getElementById('shadowResult').innerHTML=
-    `<div class="pill">识别到：<strong>${heard||'（没听清）'}</strong></div>
-     <div class="feedback"><span class="score ${cls}">${pct}分</span>
-     <span class="muted"> 读对 ${matched}/${target.length} 词</span></div>
-     <div class="warnbox">这是<strong>文字识别匹配</strong>非真实发音评测。配置 Azure 后即为音素级评分。</div>`;
+    `<div class="pill">${tr('recognized')} <strong>${heard||tr('unclear')}</strong></div>
+     <div class="feedback"><span class="score ${cls}">${pct}</span>
+     <span class="muted"> ${tr('wordsMatched',{matched,total:target.length})}</span></div>
+     <div class="warnbox">${tr('matchingWarn')}</div>`;
 }
 
 // ---- 盲听：编辑距离对齐，标注 对/听错/漏听/多写 ----
@@ -769,19 +859,19 @@ document.getElementById('blindCheck').onclick=async ()=>{
   const cls=pct>=80?'good':pct>=50?'mid':'low';
   const box=document.getElementById('blindResult');
   box.innerHTML=
-    `<div class="feedback"><span class="score ${cls}">${pct}分</span><span class="muted"> 听对 ${correct}/${tTok.length} 词</span></div>
-     <div class="foldhead" id="ansFold">▾ 答案对照</div>
+    `<div class="feedback"><span class="score ${cls}">${pct}</span><span class="muted"> ${tr('correctWords',{correct,total:tTok.length})}</span></div>
+     <div class="foldhead" id="ansFold">▾ ${tr('answerComparison')}</div>
      <div id="ansBody">
-       <div class="legend"><i>上行 正确答案（<span class="a-err">红</span>=你没答对，<span class="a-miss">虚线</span>=漏听）</i><i>下行 你打的（<span class="d-ok">绿对</span> <span class="d-wrong">红错</span> <span class="d-extra">删除线 多写</span>）</i></div>
+       <div class="legend">${tr('legend')}</div>
        <div class="cmp">
-         <div class="cmprow"><span class="cmplabel">正确</span><span class="cmptext">${ansParts.join(' ')}</span></div>
-         <div class="cmprow"><span class="cmplabel">你的</span><span class="cmptext">${youParts.join(' ')||'<span class="muted">（没打）</span>'}</span></div>
+         <div class="cmprow"><span class="cmplabel">${tr('correct')}</span><span class="cmptext">${ansParts.join(' ')}</span></div>
+         <div class="cmprow"><span class="cmplabel">${tr('yours')}</span><span class="cmptext">${youParts.join(' ')||'<span class="muted">'+tr('empty')+'</span>'}</span></div>
        </div>
      </div>`;
   document.getElementById('ansFold').onclick=()=>{
     const b=document.getElementById('ansBody'), open=b.style.display!=='none';
     b.style.display=open?'none':'block';
-    document.getElementById('ansFold').textContent=(open?'▸':'▾')+' 答案对照';
+    document.getElementById('ansFold').textContent=(open?'▸':'▾')+' '+tr('answerComparison');
   };
   blindChecked=true;   // 进入"已比对"态：下一次 Enter = 下一句
 };
@@ -842,9 +932,9 @@ document.getElementById('prev').onclick=()=>go(-1);
 document.getElementById('next').onclick=()=>go(1);
 // 播放/暂停按钮：随音频状态切换图标
 const playBtn=document.getElementById('play');
-const ICON_PLAY='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>播放';
-const ICON_PAUSE='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>暂停';
-function setPlayBtn(playing){ playBtn.innerHTML=playing?ICON_PAUSE:ICON_PLAY; }
+const ICON_PLAY='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const ICON_PAUSE='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>';
+function setPlayBtn(playing){ playBtn.innerHTML=(playing?ICON_PAUSE+tr('pause'):ICON_PLAY+tr('play')); }
 player.addEventListener('play',()=>setPlayBtn(true));
 player.addEventListener('play',()=>{ if(hlSpans.length && !rafId) startTick(); });   // 续播时接着高亮
 player.addEventListener('pause',()=>setPlayBtn(false));
@@ -886,19 +976,19 @@ upBtn.onclick=()=>docFile.click();
 docFile.onchange=async()=>{
   const f=docFile.files[0]; if(!f) return;
   const info=document.getElementById('loadInfo');
-  upBtn.disabled=true; const label=upBtn.textContent; upBtn.textContent='提取中…';
-  info.textContent='正在从「'+f.name+'」提取文字…';
+  upBtn.disabled=true; upBtn.textContent=tr('extracting');
+  info.textContent=tr('extractingFile',{name:f.name});
   try{
-    const fd=new FormData(); fd.append('doc', f, f.name);
+    const fd=new FormData(); fd.append('doc', f, f.name); fd.append('lang',uiLang);
     const res=await fetch('/api/extract-doc',{method:'POST',body:fd});
     const data=await res.json();
-    if(!data.ok){ info.textContent='✗ '+(data.message||'提取失败'); }
+    if(!data.ok){ info.textContent='✗ '+(data.message||tr('extractionFailed')); }
     else{
       document.getElementById('input').value=data.text;
-      info.textContent='✓ 已提取 '+f.name+'（约 '+data.text.length+' 字），可编辑后点②开始练。';
+      info.textContent=tr('extractedFile',{name:f.name,count:data.text.length});
     }
-  }catch(e){ info.textContent='✗ 上传失败：'+e.message; }
-  finally{ upBtn.disabled=false; upBtn.textContent=label; docFile.value=''; }
+  }catch(e){ info.textContent=tr('uploadFailed',{error:e.message}); }
+  finally{ upBtn.disabled=false; upBtn.textContent=tr('uploadDoc'); docFile.value=''; }
 };
 
 // ---- 载入 ----
@@ -910,7 +1000,7 @@ function startTrainer(defaultMode){
   const m=Math.max(0,state.sentences.length-1);
   ['blind','listen','shadow'].forEach(k=>{ state.idxBy[k]=Math.min(state.idxBy[k]||0, m); });
   const st=document.getElementById('srcTitle');
-  if(state.source==='video'){ st.style.display='flex'; st.textContent='视频素材 · '+(state.title||'未命名'); }
+  if(state.source==='video'){ st.style.display='flex'; st.textContent=tr('videoMaterial',{title:state.title||tr('untitled')}); }
   else st.style.display='none';
   syncAccentUI();
   document.getElementById('trainer').style.display='flex';
@@ -921,11 +1011,11 @@ function startTrainer(defaultMode){
 
 document.getElementById('load').onclick=()=>{
   const text=document.getElementById('input').value.trim();
-  if(!text){ document.getElementById('loadInfo').textContent='先放点英文进去～'; return; }
+  if(!text){ document.getElementById('loadInfo').textContent=tr('addText'); return; }
   state.source='text'; state.timing=null; state.audioUrl=null; state.title=''; state.histId=null;
   state.idxBy={blind:0,listen:0,shadow:0};
   state.sentences=splitSentences(text);
-  document.getElementById('loadInfo').textContent=`共 ${state.sentences.length} 句`;
+  document.getElementById('loadInfo').textContent=tr('sentenceCount',{count:state.sentences.length});
   startTrainer('blind');
 };
 
@@ -939,30 +1029,30 @@ function parseTime(v){
 document.getElementById('vload').onclick=async ()=>{
   const url=document.getElementById('vurl').value.trim();
   const info=document.getElementById('vinfo');
-  if(!url){ info.textContent='先贴个视频链接～'; return; }
+  if(!url){ info.textContent=tr('pasteVideo'); return; }
   const start=parseTime(document.getElementById('vstart').value);
   const end=parseTime(document.getElementById('vend').value);
-  if(start!=null && end!=null && end<=start){ info.textContent='结束时间要晚于开始时间'; return; }
+  if(start!=null && end!=null && end<=start){ info.textContent=tr('endAfterStart'); return; }
   const vocals=document.getElementById('vvocals').checked;
   const btn=document.getElementById('vload'); btn.disabled=true;
   info.textContent= vocals
-    ? '正在下载并 AI 去除背景音…（人声分离较慢，可能要几分钟，请耐心等）'
-    : '正在下载并处理…（取决于视频长度，可能要 1–2 分钟；没字幕走转写会更久）';
+    ? tr('downloadVocals')
+    : tr('downloadProcess');
   try{
     const res=await fetch('/api/extract',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({url,start,end,vocals})});
+      body:JSON.stringify({url,start,end,vocals,lang:uiLang})});
     const data=await res.json();
     if(!res.ok || data.error) throw new Error(data.error || ('HTTP '+res.status));
-    if(!data.sentences || !data.sentences.length) throw new Error('没提取到字幕或语音内容');
+    if(!data.sentences || !data.sentences.length) throw new Error(tr('noContent'));
     state.source='video'; state.histId=null; state.idxBy={blind:0,listen:0,shadow:0};
     state.sentences=data.sentences.map(s=>s.text);
     state.timing=data.sentences.map(s=>({start:s.start, end:s.end}));
     state.audioUrl=data.audio_url; state.title=data.title||'';
-    const tag = data.source==='subtitles' ? '原字幕' : '语音转写';
-    let voc=''; if(data.vocals===true) voc=' · 已去背景音'; else if(data.vocals===false) voc=' · 背景音去除失败(用原音)';
-    info.textContent=`提取成功 · ${state.sentences.length} 句 · 来源：${tag}${voc}`;
+    const tag = data.source==='subtitles' ? tr('originalSubtitles') : tr('speechTranscription');
+    let voc=''; if(data.vocals===true) voc=tr('bgRemoved'); else if(data.vocals===false) voc=tr('bgFailed');
+    info.textContent=tr('extractionComplete',{count:state.sentences.length,source:tag,vocals:voc});
     startTrainer('listen');
-  }catch(e){ info.textContent='提取失败：'+(e.message||e); }
+  }catch(e){ info.textContent=tr('extractionError',{error:e.message||e}); }
   finally{ btn.disabled=false; }
 };
 
@@ -970,11 +1060,11 @@ document.getElementById('vload').onclick=async ()=>{
 const HKEY='et_history';
 function loadHist(){ try{ return JSON.parse(localStorage.getItem(HKEY))||[]; }catch{ return []; } }
 function saveHist(arr){ try{ localStorage.setItem(HKEY, JSON.stringify(arr.slice(0,30))); }catch(e){} }
-function deriveTitle(){ return (state.title || (state.sentences[0]||'').slice(0,28) || '未命名').trim(); }
+function deriveTitle(){ return (state.title || (state.sentences[0]||'').slice(0,28) || tr('untitled')).trim(); }
 function escapeHtml(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function fmtWhen(t){ const m=Math.floor((Date.now()-t)/60000);
-  if(m<1)return'刚刚'; if(m<60)return m+'分钟前'; const h=Math.floor(m/60);
-  if(h<24)return h+'小时前'; return Math.floor(h/24)+'天前'; }
+  if(m<1)return tr('justNow'); if(m<60)return tr('minAgo',{n:m}); const h=Math.floor(m/60);
+  if(h<24)return tr('hourAgo',{n:h}); return tr('dayAgo',{n:Math.floor(h/24)}); }
 
 function recordSession(){
   if(!state.sentences || !state.sentences.length) return;
@@ -1021,14 +1111,14 @@ function renderHist(){
   const slice=a.slice(histPage*HIST_PER_PAGE, histPage*HIST_PER_PAGE+HIST_PER_PAGE);
   list.innerHTML=slice.map(e=>{
     const done=e.idx>=e.total-1;
-    const prog=done?'<span class="done">已练完</span>':`练到 ${e.idx+1} / ${e.total} 句`;
-    const tag=e.source==='video'?'视频':'文本';
+    const prog=done?'<span class="done">'+tr('completed')+'</span>':tr('sentenceProgress',{current:e.idx+1,total:e.total});
+    const tag=e.source==='video'?tr('video'):tr('text');
     return `<div class="histItem" data-id="${e.id}">
       <div class="hi-main">
         <div class="hi-title">${escapeHtml(e.title)}</div>
         <div class="hi-sub"><span class="hchip">${tag}</span>${prog} · ${fmtWhen(e.updatedAt)}</div>
       </div>
-      <button class="hi-del" data-del="${e.id}" title="删除这条" aria-label="删除">${TRASH_SVG}</button>
+      <button class="hi-del" data-del="${e.id}" title="${tr('deleteItem')}" aria-label="${tr('delete')}">${TRASH_SVG}</button>
     </div>`;
   }).join('');
   list.querySelectorAll('.histItem').forEach(it=>it.onclick=()=>resumeEntry(+it.dataset.id));
@@ -1038,7 +1128,7 @@ function renderHist(){
     pager.style.display='flex';
     document.getElementById('histPrev').disabled=histPage===0;
     document.getElementById('histNext').disabled=histPage===pages-1;
-    document.getElementById('histPageInfo').textContent=`第 ${histPage+1} / ${pages} 页`;
+    document.getElementById('histPageInfo').textContent=tr('pageOf',{current:histPage+1,total:pages});
   } else pager.style.display='none';
 }
 document.getElementById('histPrev').onclick=()=>{ histPage--; renderHist(); };
@@ -1048,7 +1138,8 @@ document.getElementById('backToInput').onclick=()=>document.getElementById('scre
 function updateThird(){
   document.getElementById('histScreen').style.display=loadHist().length?'flex':'none';
 }
-renderHist();   // 启动时显示历史
+document.getElementById('languageSelect').addEventListener('change',e=>applyLanguage(e.target.value,true));
+applyLanguage(uiLang);
 </script>
 </body>
 </html>
